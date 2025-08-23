@@ -16,12 +16,14 @@ cmake -DCMAKE_BUILD_TYPE=Release -DYAML_CPP_BUILD_TESTS=OFF -DYAML_CPP_BUILD_TOO
 make install -j3 > /dev/null
 cd ..
 
-git clone https://github.com/ftk/quickjspp --depth=1
+git clone https://github.com/ftk/quickjspp
 cd quickjspp
+# Should use this version now, or it will not compile
+git checkout 0c00c48
 cmake -DCMAKE_BUILD_TYPE=Release .
 make quickjs -j3 > /dev/null
-install -d /usr/lib/quickjs/
-install -m644 quickjs/libquickjs.a /usr/lib/quickjs/
+# Fit the path of AUR package `quickjspp`/`quickjspp-git`
+install -m644 quickjs/libquickjs.a /usr/lib/
 install -d /usr/include/quickjs/
 install -m644 quickjs/quickjs.h quickjs/quickjs-libc.h /usr/include/quickjs/
 install -m644 quickjspp.hpp /usr/include/
