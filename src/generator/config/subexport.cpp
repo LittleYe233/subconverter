@@ -282,6 +282,9 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
         singleproxy["server"] = x.Hostname;
         singleproxy["port"] = x.Port;
 
+        if (!x.UnderlyingProxy.empty())
+            singleproxy["dialer-proxy"] = x.UnderlyingProxy;
+
         switch(x.Type)
         {
         case ProxyType::Shadowsocks:
@@ -534,6 +537,8 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
             singleproxy["type"] = "hysteria2";
             if (!x.Ports.empty())
                 singleproxy["ports"] = x.Ports;
+            if (!x.Mport.empty())
+                singleproxy["mport"] = x.Mport;
             if (!x.Up.empty())
                 singleproxy["up"] = x.UpSpeed;
             if (!x.Down.empty())
@@ -612,25 +617,96 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
         case ProxyType::VLESS:
             singleproxy["type"] = "vless";
             singleproxy["tls"] = true;
-            if (udp)
-                singleproxy["packet-encoding"] = "xudp";
+            // Output packet-encoding, xudp, packet-addr only if explicitly set
+            if (!x.PacketEncoding.empty())
+                singleproxy["packet-encoding"] = x.PacketEncoding;
+            if (!x.XUDP.is_undef())
+                singleproxy["xudp"] = x.XUDP.get();
+            if (!x.PacketAddr.is_undef())
+                singleproxy["packet-addr"] = x.PacketAddr.get();
             if (!x.UUID.empty())
                 singleproxy["uuid"] = x.UUID;
             if (!x.SNI.empty())
                 singleproxy["servername"] = x.SNI;
             if (!x.Alpn.empty())
                 singleproxy["alpn"] = x.Alpn;
+
+            switch(hash_(x.TransferProtocol))
+            {
+                case "tcp"_hash:
+                    if(!x.Host.empty())
+                        singleproxy["host"] = x.Host;
+                    if(!x.Path.empty())
+                        singleproxy["path"] = x.Path;
+                    break;
+                case "ws"_hash:
+                    singleproxy["network"] = x.TransferProtocol;
+                    if(ext.clash_new_field_name)
+                    {
+                        if(!x.Path.empty())
+                            singleproxy["ws-opts"]["path"] = x.Path;
+                        if(!x.Host.empty())
+                            singleproxy["ws-opts"]["headers"]["Host"] = x.Host;
+                        if(!x.Edge.empty())
+                            singleproxy["ws-opts"]["headers"]["Edge"] = x.Edge;
+                    }
+                    else
+                    {
+                        if(!x.Path.empty())
+                            singleproxy["ws-path"] = x.Path;
+                        if(!x.Host.empty())
+                            singleproxy["ws-headers"]["Host"] = x.Host;
+                        if(!x.Edge.empty())
+                            singleproxy["ws-headers"]["Edge"] = x.Edge;
+                    }
+                    break;
+                case "http"_hash:
+                    singleproxy["network"] = x.TransferProtocol;
+                    singleproxy["http-opts"]["method"] = "GET";
+                    if(!x.Path.empty())
+                        singleproxy["http-opts"]["path"].push_back(x.Path);
+                    if(!x.Host.empty())
+                        singleproxy["http-opts"]["headers"]["Host"].push_back(x.Host);
+                    if(!x.Edge.empty())
+                        singleproxy["http-opts"]["headers"]["Edge"].push_back(x.Edge);
+                    break;
+                case "h2"_hash:
+                    singleproxy["network"] = x.TransferProtocol;
+                    if(!x.Path.empty())
+                        singleproxy["h2-opts"]["path"] = x.Path;
+                    if(!x.Host.empty())
+                        singleproxy["h2-opts"]["host"].push_back(x.Host);
+                    break;
+                case "grpc"_hash:
+                    singleproxy["network"] = x.TransferProtocol;
+                    singleproxy["grpc-opts"]["grpc-mode"] = x.GRPCMode;
+                    singleproxy["grpc-opts"]["grpc-service-name"] = x.GRPCServiceName;
+                    break;
+                default:
+                    break;
+            }
+
             if (!x.Fingerprint.empty())
                 singleproxy["fingerprint"] = x.Fingerprint;
             if (x.XTLS == 2) {
                 singleproxy["flow"] = "xtls-rprx-vision";
+            } else if (!x.FlowSet.is_undef() && x.FlowSet.get()) {
+                // Output flow field if it was explicitly set (even if empty)
+                singleproxy["flow"] = x.Flow;
             } else if (!x.Flow.empty()) {
+                // Fallback for backward compatibility
                 singleproxy["flow"] = x.Flow;
             }
             if (!x.PublicKey.empty() && !x.ShortID.empty()) {
                 singleproxy["reality-opts"]["public-key"] = x.PublicKey;
                 singleproxy["reality-opts"]["short-id"] = x.ShortID;
-                singleproxy["client-fingerprint"] = "random";
+                if (!x.ClientFingerprint.empty()) {
+                    singleproxy["client-fingerprint"] = x.ClientFingerprint;
+                } else if (!x.Fingerprint.empty()) {
+                    singleproxy["client-fingerprint"] = x.Fingerprint;
+                } else {
+                    singleproxy["client-fingerprint"] = "random";
+                }
             }
             if (!scv.is_undef())
                 singleproxy["skip-cert-verify"] = scv.get();
@@ -641,8 +717,9 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
 
         // UDP is not supported yet in clash using snell
         // sees in https://dreamacro.github.io/clash/configuration/outbound.html#snell
-        if(udp && x.Type != ProxyType::Snell)
-            singleproxy["udp"] = true;
+        // Output UDP field when explicitly provided (true or false)
+        if(!x.UDP.is_undef() && x.Type != ProxyType::Snell)
+            singleproxy["udp"] = x.UDP.get();
         if(!tfo.is_undef())
             singleproxy["tfo"] = tfo.get();
         if(proxy_block)
@@ -1560,7 +1637,7 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
 
         processRemark(x.Remark, remarks_list);
 
-        std::string &hostname = x.Hostname, &method = x.EncryptMethod, &id = x.UserId, &transproto = x.TransferProtocol, &host = x.Host, &path = x.Path, &password = x.Password, &plugin = x.Plugin, &pluginopts = x.PluginOption, &protocol = x.Protocol, &protoparam = x.ProtocolParam, &obfs = x.OBFS, &obfsparam = x.OBFSParam, &username = x.Username;
+        std::string &hostname = x.Hostname, &method = x.EncryptMethod, &id = x.UserId, &transproto = x.TransferProtocol, &host = x.Host, &path = x.Path, &password = x.Password, &plugin = x.Plugin, &pluginopts = x.PluginOption, &protocol = x.Protocol, &protoparam = x.ProtocolParam, &obfs = x.OBFS, &obfsparam = x.OBFSParam, &username = x.Username, &uuid = x.UUID, &sni = x.SNI, &publickey = x.PublicKey, &shortid = x.ShortID, &flow = x.Flow;
         std::string port = std::to_string(x.Port);
         bool &tlssecure = x.TLSSecure;
 
@@ -1679,6 +1756,75 @@ void proxyToQuanX(std::vector<Proxy> &nodes, INIReader &ini, std::vector<Ruleset
                     proxyStr += ", over-tls=false";
                 }
             }
+            break;
+        case ProxyType::VLESS:
+            method = "none";
+            proxyStr = "vless = " + hostname + ":" + port + ", method=" + method + ", password=" + uuid;
+            if(tlssecure && !tls13.is_undef())
+                proxyStr += ", tls13=" + std::string(tls13 ? "true" : "false");
+            if(transproto == "ws")
+            {
+                if(tlssecure)
+                    proxyStr += ", obfs=wss";
+                else
+                    proxyStr += ", obfs=ws";
+
+                if(tlssecure && !publickey.empty() && sni.empty())
+                    writeLog(0, "Quantumult X vless reality: public key present but SNI missing; skipping reality output.", LOG_LEVEL_WARNING);
+                if(tlssecure && !shortid.empty() && publickey.empty())
+                    writeLog(0, "Quantumult X vless reality: shortid present but public key missing; skipping reality output.", LOG_LEVEL_WARNING);
+
+                if(tlssecure && !publickey.empty() && !sni.empty())
+                    proxyStr += ", obfs-host=" + sni;
+                else if(!host.empty())
+                    proxyStr += ", obfs-host=" + host;
+                    
+                if(!path.empty())
+                    proxyStr += ", obfs-uri=" + path;
+
+                if(tlssecure && !publickey.empty() && !sni.empty())
+                {
+                    proxyStr += ", reality-base64-pubkey=" + publickey;
+                    if(!shortid.empty())
+                        proxyStr += ", reality-hex-shortid=" + shortid;
+                }
+            }
+            else if(transproto == "http")
+            {
+                proxyStr += ", obfs=http";
+                if(!host.empty())
+                    proxyStr += ", obfs-host=" + host;
+                if(!path.empty())
+                        proxyStr += ", obfs-uri=" + path;
+            }
+            else if(transproto == "tcp")
+            {
+                if(tlssecure){
+                    proxyStr += ", obfs=over-tls";
+
+                    if(!publickey.empty() && sni.empty())
+                        writeLog(0, "Quantumult X vless reality: public key present but SNI missing; skipping reality output.", LOG_LEVEL_WARNING);
+                    if(!shortid.empty() && publickey.empty())
+                        writeLog(0, "Quantumult X vless reality: shortid present but public key missing; skipping reality output.", LOG_LEVEL_WARNING);
+
+                    if(!publickey.empty() && !sni.empty()){
+                        proxyStr += ", obfs-host=" + sni;
+                        proxyStr += ", reality-base64-pubkey=" + publickey;
+                        if(!shortid.empty())
+                            proxyStr += ", reality-hex-shortid=" + shortid;
+                        if(!flow.empty())
+                            proxyStr += ", vless-flow=" + flow;
+                    }
+
+                }
+            }
+            else if(tlssecure)
+            {
+                proxyStr += ", obfs=over-tls";
+                if(!sni.empty())
+                    proxyStr += ", obfs-host=" + sni;
+            }
+                
             break;
         default:
             continue;
@@ -2153,6 +2299,16 @@ std::string proxyToLoon(std::vector<Proxy> &nodes, const std::string &base_conf,
             if(x.KeepAlive > 0)
                 proxy += ", keepalive=" + std::to_string(x.KeepAlive);
             proxy += ", peers=[{" + generatePeer(x, true) + "}]";
+            break;
+        case ProxyType::Hysteria2:
+            proxy = "hysteria2," + hostname + "," + port + ",\"" + password + "\"";
+
+            if(!scv.is_undef())
+                proxy += ",skip-cert-verify=" + std::string(scv.get() ? "true" : "false");
+            if(!x.Fingerprint.empty())
+                proxy += ",tls-cert-sha256=" + x.Fingerprint;
+            if(!x.SNI.empty())
+                proxy += ",sni=" + x.SNI;
             break;
         default:
             continue;
@@ -2658,14 +2814,18 @@ void proxyToSingBox(std::vector<Proxy> &nodes, rapidjson::Document &json, std::v
                     tls.AddMember("reality", reality, allocator);
 
                     rapidjson::Value utls(rapidjson::kObjectType);
-                    utls.AddMember("enable",true,allocator);
+                    utls.AddMember("enabled",true,allocator);
                     std::array<std::string, 6> fingerprints = {"chrome", "firefox", "safari", "ios", "edge", "qq"};
                     utls.AddMember("fingerprint", rapidjson::Value(fingerprints[rand() % fingerprints.size()].c_str(), allocator), allocator);
                     tls.AddMember("utls", utls, allocator);
                 }
 
                 proxy.AddMember("tls", tls, allocator);
-
+                
+                auto transport = buildSingBoxTransport(x, allocator);
+                if (!transport.ObjectEmpty())
+                    proxy.AddMember("transport", transport, allocator);
+                
                 break;
             }
 
