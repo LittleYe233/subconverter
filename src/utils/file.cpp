@@ -1,19 +1,109 @@
 #include <string>
 #include <fstream>
 #include <sys/stat.h>
+#include <vector>
+#include <mutex>
+#include <cstdlib>
+#include <climits>
 
 #include "utils/string.h"
+#include "handler/settings.h"
 
+#ifdef _WIN32
+#include <stdlib.h>
+static std::string get_absolute_path(const std::string& path) {
+    char abs_path[_MAX_PATH];
+    if (_fullpath(abs_path, path.c_str(), _MAX_PATH) != NULL) {
+        return std::string(abs_path);
+    }
+    return "";
+}
+#else
+static std::string get_absolute_path(const std::string& path) {
+    char abs_path[PATH_MAX];
+    if (realpath(path.c_str(), abs_path) != NULL) {
+        return std::string(abs_path);
+    }
+    return "";
+}
+#endif
+
+/**
+ * @brief Resolve `allowed_scopes` in global variable. Both relative
+ * and absolute paths are supported. Relative paths are based on the current
+ * folder of the executable. All paths are resolved to absolute paths.
+ * 
+ * @param scopes A list of allowed paths.
+ */
+void resolveAllowedScopes(std::vector<std::string>& scopes)
+{
+    std::vector<std::string> resolved_scopes;
+    
+    // Always add current working directory to allowed scopes
+    std::string cwd = get_absolute_path(".");
+    if (!cwd.empty()) {
+        resolved_scopes.push_back(cwd);
+    }
+
+    for (const auto& scope : scopes) {
+        std::string abs_scope = get_absolute_path(scope);
+        if (!abs_scope.empty()) {
+            resolved_scopes.push_back(abs_scope);
+        }
+    }
+
+    scopes = resolved_scopes;
+}
+
+/**
+ * @brief Determine if a given `path` is within the allowed scopes.
+ *
+ * Allowed scopes are defined as `global.allowedScopes` plus the current folder
+ * of the executable as well as its children. All paths are resolved to 
+ * absolute paths before comparison to handle symlinks and relative paths securely.
+ * 
+ * @param path The path to be checked.
+ * @return true if the path is within allowed scopes.
+ * @return false 
+ */
 bool isInScope(const std::string &path)
 {
-#ifdef _WIN32
-    if(path.find(":\\") != path.npos || path.find("..") != path.npos)
+    if (path.find("..") != std::string::npos)
         return false;
-#else
-    if(startsWith(path, "/") || path.find("..") != path.npos)
+
+    std::string abs_path = get_absolute_path(path);
+    if (abs_path.empty()) {
         return false;
-#endif // _WIN32
-    return true;
+    }
+
+    if (!global.enableAllowedScopes) {
+        return true;
+    }
+
+    if (global.allowedScopes.empty()) {
+        std::string cwd = get_absolute_path(".");
+        if (!cwd.empty() && startsWith(abs_path, cwd)) {
+             // Check boundary to avoid /tmp/foo matching /tmp/foobar
+            if(abs_path.size() == cwd.size()) return true;
+            char next_char = abs_path[cwd.size()];
+            if(next_char == '/' || next_char == '\\') return true;
+        }
+        return false;
+    }
+
+    for (const auto& scope : global.allowedScopes)
+    {
+        if (startsWith(abs_path, scope))
+        {
+            if (abs_path.size() == scope.size()) return true;
+            char last_scope_char = scope.back();
+            if (last_scope_char == '/' || last_scope_char == '\\') return true;
+            char next_char = abs_path[scope.size()];
+            if (next_char == '/' || next_char == '\\') return true;
+        }
+    }
+
+    return false;
 }
 
 // TODO: Add preprocessor option to disable (open web service safety)

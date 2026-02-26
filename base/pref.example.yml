@@ -20,6 +20,8 @@ common:
   loon_rule_base: base/all_base.tpl
   sssub_rule_base: base/all_base.tpl
   singbox_rule_base: base/all_base.tpl
+  allowed_scopes: []
+  enable_allowed_scopes: false
   proxy_config: SYSTEM
   proxy_ruleset: SYSTEM
   proxy_subscription: NONE

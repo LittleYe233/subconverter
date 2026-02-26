@@ -24,10 +24,11 @@ struct Settings
     std::vector<RulesetContent> rulesetsContent;
     std::string listenAddress = "127.0.0.1", defaultUrls, insertUrls, managedConfigPrefix;
     int listenPort = 25500, maxPendingConns = 10, maxConcurThreads = 4;
-    bool prependInsert = true, skipFailedLinks = false;
+    bool prependInsert = true, skipFailedLinks = false, enableAllowedScopes = false;
     bool APIMode = true, writeManagedConfig = false, enableRuleGen = true, updateRulesetOnRequest = false, overwriteOriginalRules = true;
     bool printDbgInfo = false, CFWChildProcess = false, appendUserinfo = true, asyncFetchRuleset = false, surgeResolveHostname = true;
     std::string accessToken, basePath = "base";
+    string_array allowedScopes;
     std::string custom_group;
     int logLevel = LOG_LEVEL_VERBOSE;
     long maxAllowedDownloadSize = 1048576L;

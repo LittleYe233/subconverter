@@ -203,6 +203,12 @@ int addNodes(std::string link, std::vector<Proxy> &allNodes, int groupID, parse_
     case ConfType::Local:
         if(!authorized)
             return -1;
+        // Check allowed scopes
+        if (global.enableAllowedScopes && !isInScope(link))
+        {
+            writeLog(LOG_TYPE_ERROR, "Link is out of valid scopes!");
+            return -1;
+        }
         writeLog(LOG_TYPE_INFO, "Parsing configuration file data...");
         if(explodeConf(link, nodes) == 0)
         {

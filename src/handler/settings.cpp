@@ -8,6 +8,7 @@
 #include "server/webserver.h"
 #include "utils/logger.h"
 #include "utils/network.h"
+#include "utils/file.h"
 #include "interfaces.h"
 #include "multithread.h"
 #include "settings.h"
@@ -323,6 +324,9 @@ void readYAMLConf(YAML::Node &node)
         section["include_remarks"] >> global.includeRemarks;
     global.filterScript = safe_as<bool>(section["enable_filter"]) ? safe_as<std::string>(section["filter_script"]) : "";
     section["base_path"] >> global.basePath;
+    global.enableAllowedScopes = safe_as<bool>(section["enable_allowed_scopes"]);
+    if(section["allowed_scopes"].IsSequence())
+        section["allowed_scopes"] >> global.allowedScopes;
     section["clash_rule_base"] >> global.clashBase;
     section["surge_rule_base"] >> global.surgeBase;
     section["surfboard_rule_base"] >> global.surfboardBase;
@@ -602,6 +606,7 @@ void readTOMLConf(toml::value &root)
                   "enable_filter", filter,
                   "default_external_config", global.defaultExtConfig,
                   "base_path", global.basePath,
+                  "enable_allowed_scopes", global.enableAllowedScopes,
                   "clash_rule_base", global.clashBase,
                   "surge_rule_base", global.surgeBase,
                   "surfboard_rule_base", global.surfboardBase,
@@ -622,6 +627,9 @@ void readTOMLConf(toml::value &root)
         find_if_exist(section_common, "filter_script", global.filterScript);
     else
         global.filterScript.clear();
+
+    find_if_exist(section_common, "allowed_scopes", global.allowedScopes);
+    resolveAllowedScopes(global.allowedScopes);
 
     safe_set_streams(toml::find_or<RegexMatchConfigs>(root, "userinfo", "stream_rule", RegexMatchConfigs{}));
     safe_set_times(toml::find_or<RegexMatchConfigs>(root, "userinfo", "time_rule", RegexMatchConfigs{}));
@@ -740,7 +748,8 @@ void readTOMLConf(toml::value &root)
                   "cache_ruleset", cache_ruleset,
                   "script_clean_context", global.scriptCleanContext,
                   "async_fetch_ruleset", global.asyncFetchRuleset,
-                  "skip_failed_links", global.skipFailedLinks
+                  "skip_failed_links", global.skipFailedLinks,
+                  "enable_allowed_scopes", global.enableAllowedScopes
     );
 
     if(global.printDbgInfo)
@@ -780,6 +789,7 @@ void readTOMLConf(toml::value &root)
         global.cacheSubscription = global.cacheConfig = global.cacheRuleset = 0;
     }
 
+    resolveAllowedScopes(global.allowedScopes);
     writeLog(0, "Load preference settings in TOML format completed.", LOG_LEVEL_INFO);
 }
 
@@ -844,6 +854,9 @@ void readConf()
         ini.get_all("include_remarks", global.includeRemarks);
     global.filterScript = ini.get_bool("enable_filter") ? ini.get("filter_script") : "";
     ini.get_if_exist("base_path", global.basePath);
+    ini.get_bool_if_exist("enable_allowed_scopes", global.enableAllowedScopes);
+    if(ini.item_prefix_exist("allowed_scopes"))
+        ini.get_all("allowed_scopes", global.allowedScopes);
     ini.get_if_exist("clash_rule_base", global.clashBase);
     ini.get_if_exist("surge_rule_base", global.surgeBase);
     ini.get_if_exist("surfboard_rule_base", global.surfboardBase);
@@ -1070,6 +1083,8 @@ void readConf()
     ini.get_bool_if_exist("script_clean_context", global.scriptCleanContext);
     ini.get_bool_if_exist("async_fetch_ruleset", global.asyncFetchRuleset);
     ini.get_bool_if_exist("skip_failed_links", global.skipFailedLinks);
+
+    resolveAllowedScopes(global.allowedScopes);
 
     writeLog(0, "Load preference settings in INI format completed.", LOG_LEVEL_INFO);
 }
