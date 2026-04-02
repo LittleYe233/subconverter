@@ -2104,6 +2104,10 @@ void explodeStdAnyTLS(std::string anytls, Proxy &node) {
 
     // 其他参数
     sni = getUrlArg(addition, "peer");
+    // Some implementations use "sni" instead of "peer". As fallback
+    if (sni.empty()) {
+        sni = getUrlArg(addition, "sni");
+    }
     alpn = getUrlArg(addition, "alpn");
     fingerprint = urlDecode(getUrlArg(addition, "hpkp"));
     tfo = tribool(getUrlArg(addition, "tfo"));
