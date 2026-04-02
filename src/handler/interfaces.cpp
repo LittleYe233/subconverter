@@ -65,6 +65,7 @@ const std::vector<UAProfile> UAMatchList = {
     {"ClashX Pro","","","clash",true},
     {"ClashX","\\/([0-9.]+)","0.13","clash",true},
     {"Clash","","","clash",true},
+    {"mihomo","","","mihomo",true},
     {"Kitsunebi","","","v2ray"},
     {"Loon","","","loon"},
     {"Pharos","","","mixed"},
@@ -317,7 +318,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS)
     case "ss"_hash: case "ssd"_hash: case "ssr"_hash: case "sssub"_hash: case "v2ray"_hash: case "trojan"_hash: case "mixed"_hash:
         lSimpleSubscription = true;
         break;
-    case "clash"_hash: case "clashr"_hash: case "surge"_hash: case "quan"_hash: case "quanx"_hash: case "loon"_hash: case "surfboard"_hash: case "mellow"_hash: case "singbox"_hash:
+    case "clash"_hash: case "clashr"_hash: case "surge"_hash: case "quan"_hash: case "quanx"_hash: case "loon"_hash: case "surfboard"_hash: case "mellow"_hash: case "singbox"_hash: case "mihomo"_hash:
         break;
     default:
         *status_code = 400;
@@ -360,7 +361,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS)
     /// for external configuration
     std::string lClashBase = global.clashBase, lSurgeBase = global.surgeBase, lMellowBase = global.mellowBase, lSurfboardBase = global.surfboardBase;
     std::string lQuanBase = global.quanBase, lQuanXBase = global.quanXBase, lLoonBase = global.loonBase, lSSSubBase = global.SSSubBase;
-    std::string lSingBoxBase = global.singBoxBase;
+    std::string lSingBoxBase = global.singBoxBase, lMihomoBase = global.mihomoBase;
 
     /// validate urls
     argEnableInsert.define(global.enableInsert);
@@ -465,6 +466,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS)
                     checkExternalBase(extconf.quanx_rule_base, lQuanXBase);
                     checkExternalBase(extconf.loon_rule_base, lLoonBase);
                     checkExternalBase(extconf.singbox_rule_base, lSingBoxBase);
+                    checkExternalBase(extconf.mihomo_rule_base, lMihomoBase);
 
                     if(!extconf.surge_ruleset.empty())
                         lCustomRulesets = extconf.surge_ruleset;
@@ -768,7 +770,7 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS)
         if(ext.nodelist)
         {
             YAML::Node yamlnode;
-            proxyToClash(nodes, yamlnode, dummy_group, argTarget == "clashr", ext);
+            proxyToClash(nodes, yamlnode, dummy_group, argTarget == "clashr", false, ext);
             output_content = YAML::Dump(yamlnode);
         }
         else
@@ -778,7 +780,30 @@ std::string subconverter(RESPONSE_CALLBACK_ARGS)
                 *status_code = 400;
                 return base_content;
             }
-            output_content = proxyToClash(nodes, base_content, lRulesetContent, lCustomProxyGroups, argTarget == "clashr", ext);
+            output_content = proxyToClash(nodes, base_content, lRulesetContent, lCustomProxyGroups, argTarget == "clashr", false, ext);
+        }
+
+        if(argUpload)
+            uploadGist(argTarget, argUploadPath, output_content, false);
+        break;
+    case "mihomo"_hash:
+        writeLog(0, "Generate target: Mihomo", LOG_LEVEL_INFO);
+        tpl_args.local_vars["clash.new_field_name"] = ext.clash_new_field_name ? "true" : "false";
+        response.headers["profile-update-interval"] = std::to_string(interval / 3600);
+        if(ext.nodelist)
+        {
+            YAML::Node yamlnode;
+            proxyToMihomo(nodes, yamlnode, dummy_group, ext);
+            output_content = YAML::Dump(yamlnode);
+        }
+        else
+        {
+            if(render_template(fetchFile(lMihomoBase, proxy, global.cacheConfig), tpl_args, base_content, global.templatePath) != 0)
+            {
+                *status_code = 400;
+                return base_content;
+            }
+            output_content = proxyToMihomo(nodes, base_content, lRulesetContent, lCustomProxyGroups, ext);
         }
 
         if(argUpload)
@@ -1127,7 +1152,7 @@ std::string surgeConfToClash(RESPONSE_CALLBACK_ARGS)
     ext.clash_proxy_groups_style = global.clashProxyGroupsStyle;
 
     ProxyGroupConfigs dummy_groups;
-    proxyToClash(nodes, clash, dummy_groups, false, ext);
+    proxyToClash(nodes, clash, dummy_groups, false, false, ext);
 
     section.clear();
     ini.get_items("Proxy", section);

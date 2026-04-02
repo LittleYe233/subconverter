@@ -230,7 +230,7 @@ void groupGenerate(const std::string &rule, std::vector<Proxy> &nodelist, string
     }
 }
 
-void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupConfigs &extra_proxy_group, bool clashR, extra_settings &ext)
+void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupConfigs &extra_proxy_group, bool clashR, bool isMihomo, extra_settings &ext)
 {
     YAML::Node proxies, original_groups;
     std::vector<Proxy> nodelist;
@@ -718,8 +718,13 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
         // UDP is not supported yet in clash using snell
         // sees in https://dreamacro.github.io/clash/configuration/outbound.html#snell
         // Output UDP field when explicitly provided (true or false)
-        if(!x.UDP.is_undef() && x.Type != ProxyType::Snell)
-            singleproxy["udp"] = x.UDP.get();
+        if (isMihomo) {
+            if(!udp.is_undef() && x.Type != ProxyType::Snell)
+                singleproxy["udp"] = udp.get();
+        } else {
+            if(!x.UDP.is_undef() && x.Type != ProxyType::Snell)
+                singleproxy["udp"] = x.UDP.get();
+        }
         if(!tfo.is_undef())
             singleproxy["tfo"] = tfo.get();
         if(proxy_block)
@@ -826,7 +831,7 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
         yamlnode["Proxy Group"] = original_groups;
 }
 
-std::string proxyToClash(std::vector<Proxy> &nodes, const std::string &base_conf, std::vector<RulesetContent> &ruleset_content_array, const ProxyGroupConfigs &extra_proxy_group, bool clashR, extra_settings &ext)
+std::string proxyToClash(std::vector<Proxy> &nodes, const std::string &base_conf, std::vector<RulesetContent> &ruleset_content_array, const ProxyGroupConfigs &extra_proxy_group, bool clashR, bool isMihomo, extra_settings &ext)
 {
     YAML::Node yamlnode;
 
@@ -840,7 +845,7 @@ std::string proxyToClash(std::vector<Proxy> &nodes, const std::string &base_conf
         return "";
     }
 
-    proxyToClash(nodes, yamlnode, extra_proxy_group, clashR, ext);
+    proxyToClash(nodes, yamlnode, extra_proxy_group, clashR, isMihomo, ext);
 
     if(ext.nodelist)
         return YAML::Dump(yamlnode);
@@ -874,6 +879,16 @@ std::string proxyToClash(std::vector<Proxy> &nodes, const std::string &base_conf
     //std::string output_content = YAML::Dump(yamlnode);
 
     return output_content;
+}
+
+std::string proxyToMihomo(std::vector<Proxy> &nodes, const std::string &base_conf, std::vector<RulesetContent> &ruleset_content_array, const ProxyGroupConfigs &extra_proxy_group, extra_settings &ext)
+{
+    return proxyToClash(nodes, base_conf, ruleset_content_array, extra_proxy_group, false, true, ext);
+}
+
+void proxyToMihomo(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupConfigs &extra_proxy_group, extra_settings &ext)
+{
+    proxyToClash(nodes, yamlnode, extra_proxy_group, false, true, ext);
 }
 
 // peer = (public-key = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=, allowed-ips = "0.0.0.0/0, ::/0", endpoint = engage.cloudflareclient.com:2408, client-id = 139/184/125),(public-key = bmXOC+F1FxEMF9dyiK2H5/1SUtzH0JuVo51h2wPfgyo=, endpoint = engage.cloudflareclient.com:2408)

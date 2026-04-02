@@ -13,6 +13,7 @@ clash_rule_base = "base/forcerule.yml"
 #loon_rule_base = "base/loon.conf"
 #sssub_rule_base = "base/shadowsocks_base.json"
 #singbox_rule_base = "base/singbox.json"
+#mihomo_rule_base = "base/mihomo.yaml"
 
 # Options for adding emojis
 #add_emoji = true

@@ -56,7 +56,7 @@ struct Settings
 
     std::string clashBase;
     ProxyGroupConfigs customProxyGroups;
-    std::string surgeBase, surfboardBase, mellowBase, quanBase, quanXBase, loonBase, SSSubBase, singBoxBase;
+    std::string surgeBase, surfboardBase, mellowBase, quanBase, quanXBase, loonBase, SSSubBase, singBoxBase, mihomoBase;
     std::string surgeSSRPath, quanXDevID;
 
     //cache system
@@ -86,6 +86,7 @@ struct ExternalConfig
     std::string loon_rule_base;
     std::string sssub_rule_base;
     std::string singbox_rule_base;
+    std::string mihomo_rule_base;
     RegexMatchConfigs rename;
     RegexMatchConfigs emoji;
     string_array include;

@@ -69,6 +69,9 @@ sssub_rule_base = "base/all_base.tpl"
 # sing-box config base used by the generator, supports local files/URL
 singbox_rule_base = "base/all_base.tpl"
 
+# Mihomo config base used by the generator, supports local files/URL
+mihomo_rule_base = "base/all_base.tpl"
+
 # Allowed scopes for file operations. Supports both relative and absolute paths.
 allowed_scopes = []
 
@@ -297,6 +300,10 @@ target = "/sub?target=loon"
 [[aliases]]
 uri = "/singbox"
 target = "/sub?target=singbox"
+
+[[aliases]]
+uri = "/mihomo"
+target = "/sub?target=mihomo"
 
 [[aliases]]
 uri = "/ss"
