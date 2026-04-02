@@ -4,12 +4,23 @@ This document provides guidelines for AI agents working on the subconverter code
 
 ## 1. Build, Lint, and Test
 
+### Development Environment
+
+**⚠️ NixOS Users:** Always enter the Nix shell environment **in project root** before any build/test operations:
+```bash
+nix-shell
+```
+
+The `shell.nix` in project root provides:
+- **Build tools:** gcc, cmake, ninja, pkg-config, clang-tools, gdb
+- **Dependencies:** curlFull, rapidjson, toml11, yaml-cpp, pcre2, quickjspp, libcron
+
 ### Build System
 - **Language:** C++20
 - **Build System:** CMake (Version 3.5+)
 - **Dependencies:**
   - `curl` (with mbedTLS preferred for static builds)
-  - `yaml-cpp`
+  - `yaml-cpp` (>=0.6.3)
   - `quickjspp` (specific commit `0c00c48` recommended in scripts)
   - `libcron`
   - `toml11` (v4.3.0)
@@ -18,51 +29,72 @@ This document provides guidelines for AI agents working on the subconverter code
   - `libevent` (optional/commented out)
 
 ### Build Commands
-To build the project locally:
 
+**Local development build:**
 ```bash
-mkdir build
-cd build
+mkdir build && cd build
 cmake ..
 make -j$(nproc)
 ```
 
-For a static release build (similar to CI):
-Refer to `scripts/build.alpine.release.sh` for exact dependency versions and linking flags.
+**Static library build (without JS runtime and webget):**
+```bash
+mkdir build && cd build
+cmake -DBUILD_STATIC_LIBRARY=ON ..
+make -j$(nproc)
+```
+
+**With malloc_trim for memory optimization:**
+```bash
+cmake -DUSING_MALLOC_TRIM=ON ..
+```
+
+**Release builds (reference CI scripts):**
+- Linux: `scripts/build.alpine.release.sh`
+- macOS: `scripts/build.macos.release.sh`
+- Windows: `scripts/build.windows.release.sh`
+
+**Default compile flags:** `-Wall -Wextra -Wno-unused-parameter -Wno-unused-result`
 
 ### Testing
-- **Status:** There are currently **NO** automated tests in the codebase or CI pipelines.
-- **Action:**
-  - When modifying code, verify changes manually by running the `subconverter` executable.
-  - If adding new features, consider adding a basic test framework (e.g., Google Test or Catch2) if permitted, or create a simple shell script to verify output.
-  - **Do not** attempt to run `make test` or `ctest` as they are not configured.
+- **Status:** No automated tests exist in this project
+- **Manual verification required:**
+  - Run the built `subconverter` executable with test configurations
+  - Test subscription conversion: `./subconverter -url <subscription_url> -target clash`
+  - Check logs for errors or warnings
+  - Validate output config files for correctness
+- **Do not run** `make test` or `ctest` - not configured
 
 ### Linting & Formatting
-- **Status:** No strict linting or formatting configuration (`.clang-format`, `.clang-tidy`) exists in the repository.
-- **Guideline:**
-  - Follow the existing code style (see below).
-  - Avoid reformatting entire files to minimize diff noise.
+- **Status:** No `.clang-format`, `.clang-tidy`, or similar tools configured
+- **Guideline:** Match existing code style in the file you're editing
 
 ## 2. Code Style Guidelines
 
 ### General
-- **Indentation:** 4 spaces.
-- **Line Endings:** Unix (`\n`).
-- **File Encoding:** UTF-8.
+- **Indentation:** 4 spaces (no tabs)
+- **Line Endings:** Unix (`\n`)
+- **File Encoding:** UTF-8
+- **Line Length:** Generally under 120 characters, but not strictly enforced
 
 ### Naming Conventions
-- **Variables:** Mixed. Often `camelCase` (e.g., `webServer`, `global`) or `snake_case` (e.g., `signal_handler`).
-  - Member variables often use `camelCase` (e.g., `global.listenPort`).
-  - Some legacy Hungarian notation exists (e.g., `szTemp`), but avoid for new code.
-- **Functions:** Mixed.
-  - Global functions: `camelCase` (e.g., `chkArg`) or `snake_case` (e.g., `cron_tick_caller`).
-  - Class methods: `snake_case` (e.g., `stop_web_server`) or `camelCase`.
-  - **Recommendation:** Match the style of the file/class you are editing.
-- **Classes:** `PascalCase` (e.g., `WebServer`).
-- **Macros/Constants:** `UPPER_CASE` (e.g., `LOG_LEVEL_INFO`).
+- **Variables:** Mixed style - prefer `camelCase` or `snake_case` matching the file's pattern
+  - Example: `webServer`, `global.listenPort`, `nodeCount`, `proxy_config`
+  - Avoid Hungarian notation in new code (legacy `szTemp` exists)
+- **Functions:** Mixed - use existing pattern in the file
+  - Global: `camelCase` (e.g., `chkArg`, `webGet`) or `snake_case` (e.g., `importItems`)
+  - Class methods: `snake_case` (e.g., `stop_web_server`) or `camelCase`
+- **Classes:** `PascalCase` (e.g., `WebServer`, `Proxy`, `Settings`)
+- **Macros/Constants:** `UPPER_CASE` with underscores (e.g., `LOG_LEVEL_INFO`, `RULESET_CLASH_DOMAIN`)
+- **Enums:** `UPPER_CASE` values
+- **File names:** `snake_case` (e.g., `subexport.cpp`, `logger.h`)
+
+### Header Guards
+- Use `_INCLUDED` suffix: `#ifndef FILENAME_H_INCLUDED`
+- Closing comment: `#endif // FILENAME_H_INCLUDED`
 
 ### Formatting
-- **Braces:** Allman style (opening brace on a new line) is prevalent.
+- **Braces:** Allman style (opening brace on new line)
   ```cpp
   void function()
   {
@@ -70,66 +102,81 @@ Refer to `scripts/build.alpine.release.sh` for exact dependency versions and lin
       {
           // code
       }
+      else
+      {
+          // other code
+      }
   }
   ```
-- **Includes:**
-  - Standard library headers first (e.g., `<iostream>`).
-  - System headers (e.g., `<unistd.h>`).
-  - Local headers (e.g., `"config/ruleset.h"`).
+- **Include order:** Standard library headers → System headers → Local headers
+  ```cpp
+  #include <string>
+  #include <vector>
+  #include <unistd.h>
+  #include "utils/logger.h"
+  #include "handler/settings.h"
+  ```
+- **Spacing:** Space after keywords (`if (condition)`, `while (true)`), no space inside parentheses
+- **Pointers/References:** `Type* name` or `Type &name` (style varies - match file)
+
+### Types and Declarations
+- **Function parameters:** Use `const Type&` for non-modifiable parameters
+- **Return values:** Prefer returning by value for small types, use references/pointers carefully
+- **Class members:** Use `private` by default, public only when needed
+- **Structs:** Use for simple data containers without invariants
 
 ### Error Handling
-- The project uses a mix of return codes and logging.
-- **Logging:** Use `writeLog(type, content, level)` from `utils/logger.h`.
-  - Example: `writeLog(0, "Message", LOG_LEVEL_ERROR);`
-- **Exceptions:** Not heavily used; prefer error codes or logging for recoverable errors.
+- **Primary approach:** Return codes (int, bool, or special values)
+- **Logging:** Use `writeLog(type, content, level)` from `utils/logger.h`
+  - Types: `LOG_TYPE_INFO`, `LOG_TYPE_ERROR`, `LOG_TYPE_WARN`, `LOG_TYPE_FILEDL`, etc.
+  - Levels: `LOG_LEVEL_FATAL`, `LOG_LEVEL_ERROR`, `LOG_LEVEL_WARNING`, `LOG_LEVEL_INFO`, `LOG_LEVEL_DEBUG`, `LOG_LEVEL_VERBOSE`
+  - Example: `writeLog(0, "Failed to parse config", LOG_LEVEL_ERROR);`
+- **Exceptions:** Rarely used; prefer return codes and logging
+- **Assertions:** Use sparingly for invariants that should never fail
 
-### Project Structure
-- `src/`: Source code.
-  - `handler/`: Request handlers (webget, settings, etc.).
-  - `generator/`: Config generation logic.
-  - `parser/`: Subscription parsers.
-  - `server/`: Web server implementation.
-  - `utils/`: Utility functions (string, network, file).
-- `base/`: Default configuration files and assets.
-- `scripts/`: Build and utility scripts.
+### Memory Management
+- Prefer RAII and standard containers (`std::vector`, `std::string`)
+- Use `std::move()` and `emplace_back()` for efficiency
+- Manual `delete` exists in legacy code; use smart pointers for new code
+- Enable `USING_MALLOC_TRIM` for long-running processes to free memory
 
-## 3. Common Tasks & Workflow
+### Conditional Compilation
+- Use `#ifndef NO_JS_RUNTIME` for QuickJS-dependent code
+- Use `#ifndef NO_WEBGET` for network-dependent code
+- Platform-specific: `#ifdef WIN32`, `#ifdef __APPLE__`, etc.
 
-### Adding a New Feature
-1.  **Identify the Component:** Determine if the feature belongs in `handler/` (API logic), `parser/` (input format), or `generator/` (output format).
-2.  **Implementation:**
-    - Create new files in the appropriate directory if the feature is large.
-    - Update `CMakeLists.txt` to include new source files.
-    - Follow the existing code style.
-3.  **Verification:**
-    - Build the project locally.
-    - Run the executable with test arguments or configuration.
-    - Verify the output manually.
+### Global Variables
+- Declare with `extern` in headers: `extern Settings global;`
+- Define in one source file: `Settings global;`
+- Prefer avoiding new globals; use dependency injection where possible
 
-### Updating Dependencies
-- Dependencies are managed manually in `scripts/build.alpine.release.sh` (and other platform scripts).
-- To update a dependency:
-    1.  Modify the version/tag in the build script.
-    2.  Verify compatibility with the codebase.
-    3.  Update `CMakeLists.txt` if include paths or library names change.
+## 3. Project Structure
 
-### Git Workflow
-- **Branching:** Create feature branches for changes.
-- **Commits:** Use clear, descriptive commit messages.
-- **Pull Requests:** Describe the changes and manual verification steps performed.
+- `src/generator/` - Config generation logic (Clash, Surge, SingBox, etc.)
+- `src/handler/` - HTTP request handlers, settings management
+- `src/parser/` - Subscription format parsers
+- `src/server/` - Web server implementation (currently httplib-based)
+- `src/utils/` - Utility functions (string, network, file, logging)
+- `src/script/` - QuickJS runtime for custom scripts
+- `base/` - Default config templates and assets
+- `scripts/` - Build scripts for different platforms
 
-## 4. Troubleshooting
+## 4. Common Tasks
 
-### Common Build Errors
-- **Missing Headers:** Ensure all dependencies are installed. The project relies on system-installed libraries for dynamic builds or manually compiled ones for static builds.
-- **Linker Errors:** Check `CMakeLists.txt` for missing libraries or incorrect paths.
-- **C++ Standard:** Ensure your compiler supports C++20.
+### Adding a new conversion target
+1. Add `proxyToNewTarget()` function in `src/generator/config/subexport.cpp/h`
+2. Add target case in `src/handler/interfaces.cpp` subconverter()
+3. Add base config option in `src/handler/settings.h` and loader functions
+4. Add example config in `base/pref.example.*` files
 
-### Runtime Issues
-- **Segfaults:** Use `gdb` to debug.
-  ```bash
-  gdb ./subconverter
-  run
-  bt
-  ```
-- **Config Errors:** Check `base/pref.toml` or `base/pref.ini` for syntax errors. The application logs errors to the console or log file.
+### Adding configuration options
+1. Add field to `Settings` struct in `src/handler/settings.h`
+2. Add parsing logic in `readConf()`, `readTOMLConf()`, or `readYAMLConf()`
+3. Add to example config files in `base/`
+4. Document usage in comments
+
+### Updating dependencies
+1. Modify version in `scripts/build.*.release.sh`
+2. Check CMakeLists.txt for include path changes
+3. Verify compatibility with existing code
+4. Test on all target platforms if possible
