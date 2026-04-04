@@ -2,10 +2,10 @@
 set -xe
 
 apk add gcc g++ build-base linux-headers cmake ninja-is-really-ninja \
-    autoconf automake libtool python3 mbedtls-dev mbedtls-static \
-    zlib-dev rapidjson-dev zlib-static pcre2-dev
+    autoconf automake libtool python3 mbedtls2-dev mbedtls2-static \
+    zlib-dev rapidjson-dev zlib-static pcre2-dev pcre2-static
 
-git clone https://github.com/curl/curl --depth=1 --branch curl-8_6_0
+git clone https://github.com/curl/curl --depth=1 --branch curl-7_88_1
 cd curl
 cmake -DCURL_USE_MBEDTLS=ON -DHTTP_ONLY=ON -DBUILD_TESTING=OFF -DBUILD_SHARED_LIBS=OFF -DCMAKE_USE_LIBSSH2=OFF -DBUILD_CURL_EXE=OFF -G Ninja . > /dev/null
 ninja install > /dev/null
@@ -42,7 +42,7 @@ ninja install > /dev/null
 cd ..
 
 export PKG_CONFIG_PATH=/usr/lib64/pkgconfig
-cmake -DCMAKE_BUILD_TYPE=Release -G Ninja . > /dev/null
+cmake -DCMAKE_BUILD_TYPE=Release -DBUILD_STATIC_LINKING=ON -G Ninja . > /dev/null
 ninja
 mv subconverter base/
 
