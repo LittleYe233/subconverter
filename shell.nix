@@ -15,6 +15,7 @@ pkgs.mkShell {
     pkg-config
     clang-tools
     python313Packages.ninja
+    uv
   ];
 
   buildInputs = [
@@ -26,4 +27,15 @@ pkgs.mkShell {
     quickjs
     libcron
   ];
+
+  shellHook = ''
+    cd "${toString ./.}"
+    echo "cwd: $(pwd)"
+    if [ ! -d ".venv" ]; then
+      # Use Python version from Alpine v3.23.3 Docker image
+      uv venv --python 3.12 .venv
+    fi
+    source .venv/bin/activate
+    uv pip install -r ./scripts/requirements.txt
+  '';
 }
