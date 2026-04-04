@@ -10,7 +10,7 @@ cd "$WORKDIR"
 SHA=$(git rev-parse --short HEAD) && sed -i 's/\(v[0-9]\.[0-9]\.[0-9]\)/\1-'"$SHA"'/' src/version.h
 VERSION=$(sed -n 's/.*VERSION "\(.\+\)".*/\1/p' src/version.h)
 
-docker run --rm -v "$WORKDIR":/root/workdir multiarch/alpine:amd64-latest-stable /bin/sh -c "apk add bash git nodejs npm && cd /root/workdir && chmod +x scripts/build.alpine.release.sh && bash scripts/build.alpine.release.sh"
+docker run --rm -v "$WORKDIR":/root/workdir alpine:3.23.3 /bin/sh -c "apk add bash git nodejs npm && cd /root/workdir && chmod +x scripts/build.alpine.release.sh && bash scripts/build.alpine.release.sh"
 # In previous commands, all stuff are located in `subconverter` folder
 
 FNAME=subconverter-$VERSION-linux-amd64
