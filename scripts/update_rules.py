@@ -4,13 +4,15 @@ import glob
 import logging
 import os
 import shutil
-import stat
+
+from dotenv import load_dotenv
 from git import InvalidGitRepositoryError, Repo
 
 
-def del_rw(action, name: str, exc):
-    os.chmod(name, stat.S_IWRITE)
-    os.remove(name)
+def inject_credential_to_url(url: str, username: str, password: str) -> str | None:
+    if (pos := url.find("://")) == -1:
+        return None
+    return url[:pos + 3] + username + ":" + password + "@" + url[pos + 3:]
 
 
 def open_repo(path: str):
@@ -27,28 +29,33 @@ def update_rules(repo_path: str, save_path: str, matches: list[str], keep_tree: 
     for pattern in matches:
         files = glob.glob(os.path.join(repo_path, pattern), recursive=True)
         if len(files) == 0:
-            logging.warn(f"no files found for pattern {pattern}")
+            logging.warning(f"no files found for pattern {pattern}")
             continue
         for file in files:
             if os.path.isdir(file):
                 continue
-            file_rel_path, file_name = os.path.split(os.path.relpath(file, repo_path))
+            file_rel_path, file_name = os.path.split(
+                os.path.relpath(file, repo_path))
             if keep_tree:
                 file_dest_dir = os.path.join(save_path, file_rel_path)
                 os.makedirs(file_dest_dir, exist_ok=True)
                 file_dest_path = os.path.join(file_dest_dir, file_name)
             else:
                 file_dest_path = os.path.join(save_path, file_name)
-            shutil.copy2(file, file_dest_path)
+            _ = shutil.copy2(file, file_dest_path)
             logging.info(f"copied {file} to {file_dest_path}")
 
+
 def main():
+    _ = load_dotenv()
     parser = argparse.ArgumentParser()
-    parser.add_argument("-c", "--config", default="rules_config.conf")
+    _ = parser.add_argument("-c", "--config", default="rules_config.conf")
     args = parser.parse_args()
 
     config = configparser.ConfigParser()
-    config.read(args.config)
+    if not config.read(args.config):
+        logging.error(f"failed to read config file {args.config}")
+        return
     logging.basicConfig(format="%(asctime)s %(message)s", level=logging.DEBUG)
 
     for section in config.sections():
@@ -60,17 +67,26 @@ def main():
         save_path = config.get(section, "dest", fallback=f"base/rules/{repo}")
         keep_tree = config.getboolean(section, "keep_tree", fallback=True)
 
-        logging.info(f"reading files from url {url}, matches {matches}, save to {save_path} keep_tree {keep_tree}")
+        logging.info(
+            f"reading files from url {url}, matches {matches}, save to {save_path} keep_tree {keep_tree}")
 
         repo_path = os.path.join("./tmp/repo/", repo)
 
         r = open_repo(repo_path)
         if r is None:
             logging.info(f"cloning repo {url} to {repo_path}")
+            username = os.getenv(f"RULES_CONFIG_{section}_USERNAME")
+            password = os.getenv(f"RULES_CONFIG_{section}_PASSWORD")
+            if username and password:
+                logging.debug("full credential found, injecting to url")
+                if (_result := inject_credential_to_url(url, username, password)) is None:
+                    logging.warning("url does not start with scheme, skip injecting credential")
+                else:
+                    url = _result
             r = Repo.clone_from(url, repo_path)
         else:
             logging.info(f"repo {repo_path} exists")
-            
+
         try:
             if commit is not None:
                 logging.info(f"checking out to commit {commit}")
@@ -80,7 +96,7 @@ def main():
                 r.git.checkout(branch)
             else:
                 logging.info(f"checking out to default branch")
-                r.active_branch.checkout()
+                _ = r.active_branch.checkout()
         except Exception as e:
             logging.error(f"checkout failed {e}")
             continue
