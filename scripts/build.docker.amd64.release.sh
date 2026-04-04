@@ -3,7 +3,7 @@ set -xe
 
 # A simple Docker build script from GitHub CI, for Linux amd64
 
-WORKDIR=$(dirname "$0")/..
+WORKDIR=$(realpath $(dirname "$(readlink -f "$0")")/..)
 cd "$WORKDIR"
 
 # Default to keep commit SHA in version
