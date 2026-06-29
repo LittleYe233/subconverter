@@ -1,6 +1,5 @@
 # 内容：Download
-# 数量：20条
-DOMAIN-KEYWORD,aria2
+# 数量：25条
 DOMAIN-SUFFIX,smtp
 PROCESS-NAME,DownloadService.exe
 PROCESS-NAME,Folx.exe
@@ -11,12 +10,24 @@ PROCESS-NAME,WebTorrent Helper.exe
 PROCESS-NAME,WebTorrent.exe
 PROCESS-NAME,Weiyun.exe
 PROCESS-NAME,aria2c.exe
+PROCESS-NAME,aria2c
 PROCESS-NAME,baidunetdisk.exe
+PROCESS-NAME,baidunetdisk
 PROCESS-NAME,fdm.exe
+PROCESS-NAME,qbittorrent.exe
+PROCESS-NAME,qbittorrent
 PROCESS-NAME,uTorrent.exe
+PROCESS-NAME,rclone.exe
+PROCESS-NAME,rclone-browser.exe
+PROCESS-NAME,rclone
+PROCESS-NAME,rclone-browser
+PROCESS-NAME,motrixnext-aria2c
+PROCESS-NAME,motrix-next-engine
+PROCESS-NAME,motrix-next-engine.exe
 URL-REGEX,(.+.)?(torrent|announce.php?passkey=|tracker|BitTorrent|bt_key|ed2k|find_node|get_peers|info_hash|magnet:|peer_id=|xunlei)(..+)?
 URL-REGEX,(.+.|^)(360|so|qihoo|360safe|qhimg|360totalsecurity|yunpan).(cn|com)
 URL-REGEX,(.+\.|^)(360|so)\.(cn|com)
 URL-REGEX,(.?)(xunlei|sandai|Thunder|XLLiveUD)(.)
 URL-REGEX,(Subject|HELO|SMTP)
 URL-REGEX,(api|ps|sv|offnavi|newvector|ulog.imap|newloc)(.map|).(baidu|n.shifen).com
+URL-REGEX,assets\d+\.xboxlive\.(com|cn)
