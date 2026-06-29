@@ -350,7 +350,9 @@ void vlessConstruct(
         tribool udp,
         tribool tfo,
         tribool scv,
-        const std::string &underlying_proxy
+        const std::string &underlying_proxy,
+        const std::string &xhttp_mode,
+        const std::string &xhttp_extra
 ) {
     commonConstruct(node, ProxyType::VLESS, group, remarks, server, port, udp, tfo, scv, tribool(), underlying_proxy);
     node.UUID = uuid;
@@ -385,6 +387,11 @@ void vlessConstruct(
     node.XTLS = to_int(xtls);
     node.PublicKey = public_key;
     node.ShortID = short_id;
+    // XHTTP transport options
+    if (!xhttp_mode.empty())
+        node.XhttpMode = xhttp_mode;
+    if (!xhttp_extra.empty())
+        node.XhttpExtra = xhttp_extra;
 }
 
 void explodeVmess(std::string vmess, Proxy &node)
@@ -2131,7 +2138,7 @@ void explodeAnyTLS(std::string anytls, Proxy &node) {
 }
 
 void explodeStdVLESS(std::string vless, Proxy &node) {
-    std::string add, port, uuid, sni, alpn, net, type, mode, host, path, fingerprint, remarks, addition, flow, xtls, public_key, short_id, security, tls;
+    std::string add, port, uuid, sni, alpn, net, type, mode, host, path, fingerprint, remarks, addition, flow, xtls, public_key, short_id, security, tls, xhttp_extra;
     tribool tfo, scv;
     std::string decoded, userinfo, hostinfo;
     string_array user_parts;
@@ -2219,6 +2226,14 @@ void explodeStdVLESS(std::string vless, Proxy &node) {
                 host = getUrlArg(addition, strFind(addition,"sni") ? "sni" : "quicSecurity");
                 path = getUrlArg(addition, "key");
                 break;
+            case "xhttp"_hash:
+                // XHTTP transport: path/host/mode are top-level share params,
+                // extra is a percent-encoded JSON blob with the rest of the settings.
+                host = getUrlArg(addition, "host");
+                path = getUrlArg(addition, "path");
+                mode = getUrlArg(addition, "mode");
+                xhttp_extra = urlDecode(getUrlArg(addition, "extra"));
+                break;
             default:
                 return;
         }
@@ -2233,7 +2248,7 @@ void explodeStdVLESS(std::string vless, Proxy &node) {
     if (remarks.empty())
         remarks = add + ":" + port;
     node.TLSSecure = security == "tls" || security == "reality";
-    vlessConstruct(node, VLESS_DEFAULT_GROUP, remarks, add, port, uuid, sni, alpn, type, net, mode, host, path, fingerprint, flow, xtls, public_key, short_id, "", tribool(), tfo, scv, "");
+    vlessConstruct(node, VLESS_DEFAULT_GROUP, remarks, add, port, uuid, sni, alpn, type, net, mode, host, path, fingerprint, flow, xtls, public_key, short_id, "", tribool(), tfo, scv, "", mode, xhttp_extra);
 }
 
 void explodeVLESS(std::string vless, Proxy &node) {

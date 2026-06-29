@@ -150,7 +150,9 @@ void vlessConstruct(
         tribool udp,
         tribool tfo,
         tribool scv,
-        const std::string &underlying_proxy = ""
+        const std::string &underlying_proxy = "",
+        const std::string &xhttp_mode = "",
+        const std::string &xhttp_extra = ""
 );
 
 void explodeVmess(std::string vmess, Proxy &node);

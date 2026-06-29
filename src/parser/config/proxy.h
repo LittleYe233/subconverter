@@ -220,6 +220,10 @@ struct Proxy
     String TrojanSsMethod;
     String TrojanSsPassword;
 
+    // XHTTP transport options (VLESS)
+    String XhttpMode;    // auto / packet-up / stream-up / stream-one
+    String XhttpExtra;   // raw JSON string (Xray extra format), mapped at export time
+
 };
 
 #define SS_DEFAULT_GROUP "SSProvider"

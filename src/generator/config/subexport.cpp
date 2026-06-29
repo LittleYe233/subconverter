@@ -230,6 +230,100 @@ void groupGenerate(const std::string &rule, std::vector<Proxy> &nodelist, string
     }
 }
 
+// Mapping table from Xray XHTTP "extra" JSON keys (camelCase) to mihomo
+// xhttp-opts keys (kebab-case). An explicit table is required: a generic
+// camelCase->kebab-case converter would mis-split acronym-bearing keys such as
+// "noGRPCHeader" (-> "no-g-r-p-c-header") or "scMaxEachPostBytes" (-> "s-c-...").
+struct XhttpExtraMapEntry { const char *from; const char *to; };
+static const XhttpExtraMapEntry xhttp_extra_map[] = {
+    {"headers",              "headers"},
+    {"xPaddingBytes",        "x-padding-bytes"},
+    {"xPaddingObfsMode",     "x-padding-obfs-mode"},
+    {"xPaddingKey",          "x-padding-key"},
+    {"xPaddingHeader",       "x-padding-header"},
+    {"xPaddingPlacement",    "x-padding-placement"},
+    {"xPaddingMethod",       "x-padding-method"},
+    {"noGRPCHeader",         "no-grpc-header"},
+    {"uplinkHttpMethod",     "uplink-http-method"},
+    {"sessionPlacement",     "session-placement"},
+    {"sessionKey",           "session-key"},
+    {"seqPlacement",         "seq-placement"},
+    {"seqKey",               "seq-key"},
+    {"uplinkDataPlacement",  "uplink-data-placement"},
+    {"uplinkDataKey",        "uplink-data-key"},
+    {"uplinkChunkSize",      "uplink-chunk-size"},
+    {"scMaxEachPostBytes",   "sc-max-each-post-bytes"},
+    {"scMinPostsIntervalMs", "sc-min-posts-interval-ms"}
+};
+
+static const XhttpExtraMapEntry xhttp_xmux_map[] = {
+    {"maxConcurrency",   "max-concurrency"},
+    {"maxConnections",   "max-connections"},
+    {"cMaxReuseTimes",   "c-max-reuse-times"},
+    {"hMaxRequestTimes", "h-max-request-times"},
+    {"hMaxReusableSecs", "h-max-reusable-secs"},
+    {"hKeepAlivePeriod", "h-keep-alive-period"}
+};
+
+// Parses the Xray XHTTP "extra" JSON blob (JSON is a YAML subset, so YAML::Load
+// works) and merges the recognized fields into the mihomo xhttp-opts node. Unknown
+// keys are dropped with a DEBUG log. Server-only fields (noSSEHeader,
+// scMaxBufferedPosts, scStreamUpServerSecs) are intentionally not mapped.
+static void applyXhttpExtra(YAML::Node &xhttpOpts, const std::string &extraJson)
+{
+    if (extraJson.empty())
+        return;
+    YAML::Node extra;
+    try
+    {
+        extra = YAML::Load(extraJson);
+    }
+    catch (const YAML::ParserException &e)
+    {
+        writeLog(0, "XHTTP extra JSON parse failed: " + std::string(e.what()), LOG_LEVEL_WARNING);
+        return;
+    }
+    if (!extra.IsMap())
+        return;
+
+    for (const auto &kv : extra)
+    {
+        const std::string key = kv.first.as<std::string>();
+        // xmux -> reuse-settings, with sub-key renaming
+        if (key == "xmux")
+        {
+            if (!kv.second.IsMap())
+                continue;
+            YAML::Node reuse;
+            for (const auto &m : xhttp_xmux_map)
+                if (kv.second[m.from])
+                    reuse[m.to] = kv.second[m.from];
+            if (reuse.size() > 0)
+                xhttpOpts["reuse-settings"] = reuse;
+            continue;
+        }
+        // download-settings: pass through the raw subtree for now (Tier 3). It
+        // nests a full streamSettings and is left for a dedicated follow-up.
+        if (key == "downloadSettings")
+        {
+            xhttpOpts["download-settings"] = kv.second;
+            continue;
+        }
+        bool mapped = false;
+        for (const auto &m : xhttp_extra_map)
+        {
+            if (key == m.from)
+            {
+                xhttpOpts[m.to] = kv.second;
+                mapped = true;
+                break;
+            }
+        }
+        if (!mapped)
+            writeLog(0, "XHTTP extra: dropped unknown key \"" + key + "\"", LOG_LEVEL_DEBUG);
+    }
+}
+
 void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGroupConfigs &extra_proxy_group, bool clashR, bool isMihomo, extra_settings &ext)
 {
     YAML::Node proxies, original_groups;
@@ -630,6 +724,9 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
                 singleproxy["servername"] = x.SNI;
             if (!x.Alpn.empty())
                 singleproxy["alpn"] = x.Alpn;
+            // mihomo VLESS requires the encryption field ("" for standard none)
+            if (isMihomo)
+                singleproxy["encryption"] = x.VlessEncryption;
 
             switch(hash_(x.TransferProtocol))
             {
@@ -681,6 +778,23 @@ void proxyToClash(std::vector<Proxy> &nodes, YAML::Node &yamlnode, const ProxyGr
                     singleproxy["network"] = x.TransferProtocol;
                     singleproxy["grpc-opts"]["grpc-mode"] = x.GRPCMode;
                     singleproxy["grpc-opts"]["grpc-service-name"] = x.GRPCServiceName;
+                    break;
+                case "xhttp"_hash:
+                    // Plain clash has no XHTTP transport: skip the node entirely.
+                    if (!isMihomo)
+                        continue;
+                    singleproxy["network"] = "xhttp";
+                    {
+                        YAML::Node xhttpOpts;
+                        xhttpOpts["path"] = x.Path.empty() ? "/" : x.Path;
+                        if (!x.Host.empty())
+                            xhttpOpts["host"] = x.Host;
+                        if (!x.XhttpMode.empty())
+                            xhttpOpts["mode"] = x.XhttpMode;
+                        if (!x.XhttpExtra.empty())
+                            applyXhttpExtra(xhttpOpts, x.XhttpExtra);
+                        singleproxy["xhttp-opts"] = xhttpOpts;
+                    }
                     break;
                 default:
                     break;
@@ -2482,6 +2596,8 @@ static rapidjson::Value buildSingBoxTransport(const Proxy& proxy, rapidjson::Mem
                 transport.AddMember("service_name", rapidjson::StringRef(proxy.Path.c_str()), allocator);
             break;
         }
+        // sing-box has no XHTTP transport (it uses httpupgrade etc.); XHTTP nodes
+        // are emitted without a transport here. Revisit if sing-box adds an XHTTP type.
         default:
             break;
     }
